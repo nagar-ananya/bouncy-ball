@@ -8,6 +8,7 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
+      padding: 16px;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -25,6 +26,8 @@
     }
     canvas {
       display: block;
+      max-width: 100%;
+      max-height: calc(100vh - 8rem);
       border-radius: 12px;
       box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
       background: radial-gradient(ellipse 80% 50% at 50% 100%, #2d4a6e 0%, #1e3a5f 40%, #152238 100%);
@@ -33,13 +36,14 @@
       margin: 0.75rem 0 0;
       font-size: 0.875rem;
       opacity: 0.85;
+      text-align: center;
     }
   </style>
 </head>
 <body>
   <h1>Bouncy ball</h1>
-  <canvas id="game" width="560" height="420"></canvas>
-  <p>Press <kbd>Space</kbd> to jump — press again anytime for another bounce.</p>
+  <canvas id="game" width="960" height="640"></canvas>
+  <p>Press <kbd>Enter</kbd> to start, then <kbd>Space</kbd> to bounce the ball in the air — touching the ground or the ceiling ends the game.</p>
 
   <script>
     (function () {
@@ -49,6 +53,7 @@
       const W = canvas.width;
       const H = canvas.height;
       const r = 18;
+      const ceilingY = 24;
       const floorY = H - 24;
       const gravity = 0.45;
       const bounce = 0.82;
@@ -58,6 +63,26 @@
       let y = floorY - r - 1;
       let vx = 2.2;
       let vy = 0;
+
+      // "ready" before the first game, "playing" during a game,
+      // "over" once the ball has touched the ground or the ceiling.
+      let state = "ready";
+      let bounces = 0;
+      let lastScore = 0;
+
+      function startGame() {
+        x = W / 2;
+        y = H / 2;
+        vy = jumpVy;
+        bounces = 0;
+        state = "playing";
+      }
+
+      function endGame() {
+        lastScore = bounces;
+        bounces = 0;
+        state = "over";
+      }
 
       function drawBall() {
         ctx.beginPath();
@@ -76,15 +101,37 @@
         ctx.stroke();
       }
 
-      function drawFloor() {
+      function drawWall(top, height, edgeY) {
         ctx.fillStyle = "#0d1821";
-        ctx.fillRect(0, floorY, W, H - floorY);
+        ctx.fillRect(0, top, W, height);
         ctx.strokeStyle = "rgba(100, 180, 255, 0.35)";
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(0, floorY);
-        ctx.lineTo(W, floorY);
+        ctx.moveTo(0, edgeY);
+        ctx.lineTo(W, edgeY);
         ctx.stroke();
+      }
+
+      function drawCounter() {
+        ctx.fillStyle = "#e8e8e8";
+        ctx.font = "600 24px system-ui, sans-serif";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.fillText("Bounces: " + bounces, 20, ceilingY + 16);
+      }
+
+      function drawMessage(title, lines) {
+        ctx.fillStyle = "rgba(8, 14, 26, 0.55)";
+        ctx.fillRect(0, ceilingY, W, floorY - ceilingY);
+        ctx.fillStyle = "#e8e8e8";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "700 44px system-ui, sans-serif";
+        ctx.fillText(title, W / 2, H / 2 - 40);
+        ctx.font = "400 22px system-ui, sans-serif";
+        lines.forEach(function (line, i) {
+          ctx.fillText(line, W / 2, H / 2 + 12 + i * 32);
+        });
       }
 
       function tick() {
@@ -100,26 +147,55 @@
           vx *= -1;
         }
 
+        if (y - r < ceilingY) {
+          y = ceilingY + r;
+          if (vy < 0) vy = 0;
+          if (state === "playing") endGame();
+        }
+
         if (y + r > floorY) {
           y = floorY - r;
           if (vy > 0) {
             vy *= -bounce;
             if (Math.abs(vy) < 0.65) vy = 0;
           }
+          if (state === "playing") endGame();
         }
 
         ctx.clearRect(0, 0, W, H);
-        drawFloor();
+        drawWall(0, ceilingY, ceilingY);
+        drawWall(floorY, H - floorY, floorY);
         drawBall();
+
+        if (state === "ready") {
+          drawMessage("Press Enter to start", [
+            "Press Space to bounce the ball in the air.",
+            "Don't let it touch the ground or the ceiling!"
+          ]);
+        } else if (state === "over") {
+          drawMessage("Game over", [
+            "You bounced the ball " + lastScore + (lastScore === 1 ? " time." : " times."),
+            "Press Enter to restart."
+          ]);
+        }
+        drawCounter();
 
         requestAnimationFrame(tick);
       }
 
       window.addEventListener("keydown", function (e) {
-        if (e.code !== "Space" && e.key !== " ") return;
-        if (e.repeat) return;
+        const isEnter = e.key === "Enter";
+        const isSpace = e.code === "Space" || e.key === " ";
+        if (!isEnter && !isSpace) return;
         e.preventDefault();
-        vy = jumpVy;
+        if (e.repeat) return;
+
+        if (isEnter) {
+          if (state !== "playing") startGame();
+        } else if (state === "playing") {
+          vy = jumpVy;
+          bounces++;
+        }
       });
 
       requestAnimationFrame(tick);

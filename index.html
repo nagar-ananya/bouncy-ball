@@ -48,6 +48,11 @@
     select:disabled {
       opacity: 0.5;
     }
+    input[type="checkbox"] {
+      margin: 0 0.4rem 0 0;
+      vertical-align: middle;
+      accent-color: #e85d04;
+    }
     canvas {
       display: block;
       max-width: 100%;
@@ -76,6 +81,7 @@
         <option value="5">5 (fastest)</option>
       </select>
     </label>
+    <label><input type="checkbox" id="sound" autocomplete="off" checked />Sound</label>
   </header>
   <canvas id="game" width="960" height="640"></canvas>
   <p>Pick a level, press <kbd>Enter</kbd> to start, then <kbd>Space</kbd> to bounce the ball in the air — touching the ground or the ceiling ends the game.</p>
@@ -85,6 +91,7 @@
       const canvas = document.getElementById("game");
       const ctx = canvas.getContext("2d");
       const levelSelect = document.getElementById("level");
+      const soundToggle = document.getElementById("sound");
 
       const W = canvas.width;
       const H = canvas.height;
@@ -110,6 +117,53 @@
       let lastScore = 0;
       let lastLevel = 0;
 
+      // Sounds are synthesized with the Web Audio API. Browsers only allow
+      // audio after a user gesture, so the context is created on the first key
+      // press (the start chime) rather than on page load.
+      let audio = null;
+
+      function getAudio() {
+        if (!audio) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) return null;
+          audio = new AudioCtx();
+        }
+        if (audio.state === "suspended") audio.resume();
+        return audio;
+      }
+
+      function playTone(type, fromHz, toHz, duration, volume, delay) {
+        const ac = getAudio();
+        if (!ac || !soundToggle.checked) return;
+        const t = ac.currentTime + (delay || 0);
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(fromHz, t);
+        osc.frequency.exponentialRampToValueAtTime(toHz, t + duration);
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(volume, t + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+        osc.connect(gain);
+        gain.connect(ac.destination);
+        osc.start(t);
+        osc.stop(t + duration + 0.02);
+      }
+
+      function playStartSound() {
+        playTone("triangle", 523, 523, 0.12, 0.25);
+        playTone("triangle", 784, 784, 0.18, 0.25, 0.1);
+      }
+
+      function playBounceSound() {
+        playTone("sine", 300, 650, 0.12, 0.3);
+      }
+
+      function playGameOverSound() {
+        playTone("triangle", 440, 90, 0.6, 0.3);
+        playTone("sine", 140, 45, 0.25, 0.4);
+      }
+
       function startGame() {
         x = W / 2;
         y = H / 2;
@@ -117,6 +171,7 @@
         bounces = 0;
         state = "playing";
         levelSelect.disabled = true;
+        playStartSound();
       }
 
       function endGame() {
@@ -125,6 +180,7 @@
         bounces = 0;
         state = "over";
         levelSelect.disabled = false;
+        playGameOverSound();
       }
 
       function drawBall() {
@@ -232,8 +288,10 @@
         const isEnter = e.key === "Enter";
         const isSpace = e.code === "Space" || e.key === " ";
         if (!isEnter && !isSpace) return;
-        // Let Space open the level dropdown when it has keyboard focus.
-        if (isSpace && e.target === levelSelect) return;
+        // Outside a game, let Space work the level and sound controls when
+        // they have keyboard focus.
+        if (isSpace && state !== "playing" &&
+            (e.target === levelSelect || e.target === soundToggle)) return;
         e.preventDefault();
         if (e.repeat) return;
 
@@ -242,6 +300,7 @@
         } else if (state === "playing") {
           vy = jumpVy;
           bounces++;
+          playBounceSound();
         }
       });
 

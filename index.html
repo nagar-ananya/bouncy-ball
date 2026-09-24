@@ -18,11 +18,35 @@
       font-family: system-ui, sans-serif;
       color: #e8e8e8;
     }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem 1.5rem;
+      margin: 0 0 0.75rem;
+    }
     h1 {
       font-size: 1.25rem;
       font-weight: 600;
-      margin: 0 0 0.75rem;
+      margin: 0;
       letter-spacing: 0.02em;
+    }
+    label {
+      font-size: 0.875rem;
+    }
+    select {
+      margin-left: 0.4rem;
+      padding: 0.25rem 0.5rem;
+      font: inherit;
+      color: #e8e8e8;
+      background: #0d1821;
+      border: 1px solid rgba(100, 180, 255, 0.35);
+      border-radius: 6px;
+      color-scheme: dark;
+    }
+    select:disabled {
+      opacity: 0.5;
     }
     canvas {
       display: block;
@@ -41,14 +65,26 @@
   </style>
 </head>
 <body>
-  <h1>Bouncy ball</h1>
+  <header>
+    <h1>Bouncy ball</h1>
+    <label>Level
+      <select id="level" autocomplete="off">
+        <option value="1">1 (slowest)</option>
+        <option value="2">2</option>
+        <option value="3" selected>3</option>
+        <option value="4">4</option>
+        <option value="5">5 (fastest)</option>
+      </select>
+    </label>
+  </header>
   <canvas id="game" width="960" height="640"></canvas>
-  <p>Press <kbd>Enter</kbd> to start, then <kbd>Space</kbd> to bounce the ball in the air — touching the ground or the ceiling ends the game.</p>
+  <p>Pick a level, press <kbd>Enter</kbd> to start, then <kbd>Space</kbd> to bounce the ball in the air — touching the ground or the ceiling ends the game.</p>
 
   <script>
     (function () {
       const canvas = document.getElementById("game");
       const ctx = canvas.getContext("2d");
+      const levelSelect = document.getElementById("level");
 
       const W = canvas.width;
       const H = canvas.height;
@@ -58,6 +94,9 @@
       const gravity = 0.45;
       const bounce = 0.82;
       const jumpVy = -11;
+      // How fast the game runs at each level, relative to level 1. Jump height
+      // stays the same; everything just happens faster.
+      const levelSpeeds = [1, 1.25, 1.5, 1.75, 2];
 
       let x = W / 2;
       let y = floorY - r - 1;
@@ -69,6 +108,7 @@
       let state = "ready";
       let bounces = 0;
       let lastScore = 0;
+      let lastLevel = 0;
 
       function startGame() {
         x = W / 2;
@@ -76,12 +116,15 @@
         vy = jumpVy;
         bounces = 0;
         state = "playing";
+        levelSelect.disabled = true;
       }
 
       function endGame() {
         lastScore = bounces;
+        lastLevel = levelSelect.value;
         bounces = 0;
         state = "over";
+        levelSelect.disabled = false;
       }
 
       function drawBall() {
@@ -135,9 +178,10 @@
       }
 
       function tick() {
-        if (!(y + r >= floorY && vy === 0)) vy += gravity;
-        x += vx;
-        y += vy;
+        const dt = levelSpeeds[Number(levelSelect.value) - 1];
+        if (!(y + r >= floorY && vy === 0)) vy += gravity * dt;
+        x += vx * dt;
+        y += vy * dt;
 
         if (x + r > W) {
           x = W - r;
@@ -174,7 +218,8 @@
           ]);
         } else if (state === "over") {
           drawMessage("Game over", [
-            "You bounced the ball " + lastScore + (lastScore === 1 ? " time." : " times."),
+            "You bounced the ball " + lastScore + (lastScore === 1 ? " time" : " times") +
+              " on level " + lastLevel + ".",
             "Press Enter to restart."
           ]);
         }
@@ -187,6 +232,8 @@
         const isEnter = e.key === "Enter";
         const isSpace = e.code === "Space" || e.key === " ";
         if (!isEnter && !isSpace) return;
+        // Let Space open the level dropdown when it has keyboard focus.
+        if (isSpace && e.target === levelSelect) return;
         e.preventDefault();
         if (e.repeat) return;
 
